@@ -199,3 +199,4 @@ Bagi instansi BUMN, Kementerian, maupun korporasi teknologi di Jakarta yang memb
 
 ---
 *Proyek ini diselesaikan secara mandiri oleh Fauzi Noorsyabani sebagai bukti kompetensi Full Stack AI & Data Science.*
+

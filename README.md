@@ -138,3 +138,4 @@ streamlit run app.py
 - Email: fauzinoorsyabani05@gmail.com  
 
 Lisensi: [MIT License](LICENSE)
+
