@@ -125,14 +125,25 @@ with st.sidebar:
         default=sorted(df["periode_data"].unique()),
     )
 
+    # Look for API key from st.secrets or os.getenv
+    default_key = ""
+    try:
+        default_key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        pass
+    if not default_key:
+        default_key = os.getenv("GEMINI_API_KEY", "")
+
     st.markdown("---")
     st.markdown("### Integrasi AI Studio (Gemini)")
     gemini_key_input = st.text_input(
         "Google Gemini API Key",
         type="password",
-        value=os.getenv("GEMINI_API_KEY", ""),
+        value=default_key,
         help="Dapatkan API Key gratis di Google AI Studio (aistudio.google.com) untuk mengaktifkan analisis kebijakan AI.",
     )
+    if gemini_key_input:
+        st.caption("Status API: Terhubung ke Google AI Studio")
 
     st.markdown("---")
     st.markdown("**Pengembang**: [Fauzi Noorsyabani](https://fauzinoorsyabani.my.id)")
@@ -423,7 +434,6 @@ with tab5:
 
     # Recommendation Engine Logic
     def generate_gemini_intelligence(api_key, commodity, metrics):
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
         prompt = f"""
 Anda adalah Senior Food Security & Agricultural Policy Advisor untuk Badan Pangan Nasional (Bapanas) dan Kementerian Perdagangan RI.
@@ -457,12 +467,25 @@ Format laporan mencakup 4 bagian:
                 "maxOutputTokens": 1500,
             },
         }
-        resp = requests.post(url, headers=headers, json=payload, timeout=30)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            return f"Error respons API ({resp.status_code}): {resp.text}"
+
+        candidate_models = ["gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]
+        last_error = ""
+
+        for model_name in candidate_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=25)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                elif resp.status_code == 404:
+                    continue
+                else:
+                    last_error = f"Status {resp.status_code}: {resp.text}"
+            except Exception as e:
+                last_error = str(e)
+
+        return f"Gagal menghubungi model Google AI Studio: {last_error}"
 
     # Heuristic Rule-Based Fallback
     def generate_heuristic_recommendation(commodity, metrics):

@@ -11,4 +11,6 @@ portfolio_assets/
 models/
 *.pkl
 *.joblib
-
+.env
+.env.*
+.streamlit/secrets.toml
