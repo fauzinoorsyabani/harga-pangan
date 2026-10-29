@@ -2,7 +2,7 @@
 ### Platform Analitik & Kecerdasan Harga Pangan Pokok Nasional (2023–2025)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Streamlit App](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Streamlit App](https://img.shields.io/badge/Streamlit%20App-hargapangan.my.id-FF4B4B?logo=streamlit&logoColor=white)](https://hargapangan.my.id)
 [![Scikit-Learn](https://img.shields.io/badge/scikit_learn-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Google Colab](https://img.shields.io/badge/Google%20Colab-F9AB00?logo=googlecolab&logoColor=white)](https://colab.research.google.com/)
