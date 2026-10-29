@@ -254,7 +254,7 @@ def render_interactive_bot(section_id: str, section_title: str, context_str: str
     cols = st.columns(len(sample_questions))
     selected_quick_q = None
     for idx, q_text in enumerate(sample_questions):
-        if cols[idx].button(q_text, key=f"quick_{section_id}_{idx}", use_container_width=True):
+        if cols[idx].button(q_text, key=f"quick_{section_id}_{idx}", width="stretch"):
             selected_quick_q = q_text
 
     with st.form(key=f"form_{section_id}", clear_on_submit=True):
@@ -319,7 +319,7 @@ with tab1:
         font=dict(size=12),
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width="stretch")
 
     st.subheader("Matriks Harga (Komoditas vs Tahun)")
     if not filtered_df.empty:
@@ -335,7 +335,7 @@ with tab1:
             labels=dict(color="Harga (IDR)"),
         )
         fig_heat.update_layout(height=450)
-        st.plotly_chart(fig_heat, use_container_width=True)
+        st.plotly_chart(fig_heat, width="stretch")
 
     # Context and Bot for Tab 1
     context_tab1 = f"""Tabel Harga Pivot Komoditas x Tahun:
@@ -370,11 +370,11 @@ with tab2:
         color_discrete_sequence=px.colors.qualitative.Set2,
     )
     fig2.update_layout(height=500, xaxis=dict(dtick=1))
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")
 
     st.subheader("Inflasi Year-over-Year (%)")
     styled_yoy = yoy_df.style.background_gradient(cmap="RdYlGn_r", axis=None).format("{:.2f}%")
-    st.dataframe(styled_yoy, use_container_width=True)
+    st.dataframe(styled_yoy, width="stretch")
 
     st.subheader("Compound Annual Growth Rate (CAGR 2-Tahun: 2023-2025)")
     cagr_df = cagr_series.reset_index()
@@ -389,7 +389,7 @@ with tab2:
         color_continuous_scale="RdYlGn_r",
     )
     fig_cagr.update_layout(height=450, yaxis=dict(autorange="reversed"))
-    st.plotly_chart(fig_cagr, use_container_width=True)
+    st.plotly_chart(fig_cagr, width="stretch")
 
     # Context and Bot for Tab 2
     context_tab2 = f"""Data Pertumbuhan dan Inflasi Pangan:
@@ -441,7 +441,7 @@ with tab3:
             title="Analisis Skor Silhouette vs Jumlah Klaster",
             labels={"x": "Jumlah Klaster (K)", "y": "Skor Silhouette"},
         )
-        st.plotly_chart(fig_sil, use_container_width=True)
+        st.plotly_chart(fig_sil, width="stretch")
 
     km_final = KMeans(n_clusters=best_k, random_state=42, n_init=10)
     features["cluster"] = km_final.fit_predict(X_scaled)
@@ -472,12 +472,12 @@ with tab3:
         color_discrete_sequence=px.colors.qualitative.Set2,
     )
     fig_cluster.update_layout(height=500)
-    st.plotly_chart(fig_cluster, use_container_width=True)
+    st.plotly_chart(fig_cluster, width="stretch")
 
     st.subheader("Profil Rata-rata Klaster Komoditas")
     profile = features.groupby("segment")[["mean_price", "volatility", "growth"]].mean().round(2)
     profile.columns = ["Rata-rata Harga (IDR)", "Rata-rata Volatilitas", "Pertumbuhan (%)"]
-    st.dataframe(profile, use_container_width=True)
+    st.dataframe(profile, width="stretch")
 
     # Context and Bot for Tab 3
     context_tab3 = f"""Hasil Clustering K-Means Komoditas Pangan:
@@ -524,7 +524,7 @@ with tab4:
         })
 
     forecast_df = pd.DataFrame(forecasts)
-    st.dataframe(forecast_df.set_index("Komoditas"), use_container_width=True)
+    st.dataframe(forecast_df.set_index("Komoditas"), width="stretch")
 
     fig_forecast = px.bar(
         forecast_df,
@@ -536,7 +536,7 @@ with tab4:
         labels={"value": "Harga (IDR)", "variable": "Kategori Data"},
     )
     fig_forecast.update_layout(height=500, xaxis_tickangle=-45)
-    st.plotly_chart(fig_forecast, use_container_width=True)
+    st.plotly_chart(fig_forecast, width="stretch")
 
     st.subheader("Ringkasan Metrik Evaluasi Model")
     avg_r2 = forecast_df["R2"].mean()
