@@ -20,6 +20,14 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, mean_absolute_error, mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 
+# -- Helper Functions --------------------------------------------------
+def sanitize_plain_text(text: str) -> str:
+    """Menghilangkan karakter asterisk dan format bold agar tidak memunculkan icon bintang."""
+    if not text:
+        return ""
+    return text.replace("**", "").replace("*", "").strip()
+
+
 # -- Page Configuration ------------------------------------------------
 st.set_page_config(
     page_title="Harga Pangan Indonesia — Food Price Intelligence",
@@ -72,7 +80,7 @@ def compute_cagr(pivot):
     first_year = pivot.columns.min()
     last_year = pivot.columns.max()
     n_years = last_year - first_year
-    cagr = ((pivot[last_year] / pivot[first_year]) ** (1 / n_years) - 1) * 100
+    cagr = ((pivot[last_year] / pivot[first_year]).pow(1 / n_years) - 1) * 100
     return cagr.round(2).sort_values(ascending=False)
 
 
@@ -108,9 +116,9 @@ with st.sidebar:
     st.title("Harga Pangan Indonesia")
     st.caption("Food Price Intelligence Platform")
     st.markdown("---")
-    st.markdown("**Periode Data**: 2023 - 2025")
-    st.markdown("**Komoditas**: 11 Bahan Pangan Pokok")
-    st.markdown("**Sumber Data**: BPS / Kementerian Perdagangan RI")
+    st.markdown("Periode Data: 2023 - 2025")
+    st.markdown("Komoditas: 11 Bahan Pangan Pokok")
+    st.markdown("Sumber Data: BPS / Kementerian Perdagangan RI")
     st.markdown("---")
 
     selected_commodities = st.multiselect(
@@ -140,13 +148,13 @@ with st.sidebar:
         "Google Gemini API Key",
         type="password",
         value=default_key,
-        help="Dapatkan API Key gratis di Google AI Studio (aistudio.google.com) untuk mengaktifkan analisis kebijakan AI.",
+        help="Dapatkan API Key gratis di Google AI Studio (aistudio.google.com) untuk mengaktifkan bot tanya jawab pada setiap bagian.",
     )
     if gemini_key_input:
         st.caption("Status API: Terhubung ke Google AI Studio")
 
     st.markdown("---")
-    st.markdown("**Pengembang**: [Fauzi Noorsyabani](https://fauzinoorsyabani.my.id)")
+    st.markdown("Pengembang: [Fauzi Noorsyabani](https://fauzinoorsyabani.my.id)")
     st.caption("Full Stack AI & Data Science Engineer")
 
 # -- Filter Data -------------------------------------------------------
@@ -186,6 +194,97 @@ with col4:
     st.metric("Rata-rata CAGR (2-Tahun)", f"{avg_cagr:+.2f}%")
 
 st.markdown("---")
+
+# -- Gemini Interactive Q&A Function -----------------------------------
+def ask_gemini_bot(api_key: str, section_title: str, context_text: str, user_question: str) -> str:
+    """Interactive AI Q&A bot for each dashboard section with strict plain text rules."""
+    headers = {"Content-Type": "application/json"}
+    prompt = f"""Anda adalah Analis Senior Intelijen Pangan Nasional untuk Badan Pangan Nasional (Bapanas) dan Kementerian Perdagangan RI.
+Anda sedang berdialog langsung dengan pengguna pada bagian dashboard: {section_title}.
+
+KONTEKS DATA PADA BAGIAN INI:
+{context_text}
+
+PERTANYAAN PENGGUNA:
+{user_question}
+
+PERATURAN FORMAT JAWABAN SANGAT KETAT:
+1. DILARANG MENGGUNAKAN SIMBOL BINTANG (*) MAUPUN FORMAT BOLD (**) SAMA SEKALI. JANGAN PERNAH MENULISKAN TANDA ASTERISK.
+2. DILARANG MENGGUNAKAN SIMBOL EMOJI APAPUN.
+3. Gunakan teks polos yang rapi dan profesional. Untuk penekanan kata atau judul, gunakan HURUF KAPITAL (UPPERCASE).
+4. Gunakan angka (1., 2., 3.) atau tanda strip (-) untuk membuat poin-poin penjelasan.
+5. Jawab pertanyaan pengguna secara ringkas, lugas, berbasis data di atas, dan berikan rekomendasi actionable.
+"""
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 1000,
+        },
+    }
+
+    candidate_models = ["gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]
+    for model_name in candidate_models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=25)
+            if resp.status_code == 200:
+                data = resp.json()
+                raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                return sanitize_plain_text(raw_text)
+            elif resp.status_code == 404:
+                continue
+        except Exception:
+            continue
+
+    return "Layanan Analis AI sedang sibuk atau tidak dapat dijangkau. Silakan periksa kembali API Key Anda."
+
+
+def render_interactive_bot(section_id: str, section_title: str, context_str: str, api_key: str, sample_questions: list):
+    """Menampilkan kotak bot tanya jawab interaktif untuk setiap bagian dashboard."""
+    st.markdown("---")
+    st.subheader(f"Tanya Analis AI: {section_title}")
+    st.caption(f"Konsultasikan analisis mendalam dan ajukan pertanyaan mengenai data pada bagian {section_title}.")
+
+    history_key = f"chat_history_{section_id}"
+    if history_key not in st.session_state:
+        st.session_state[history_key] = []
+
+    st.markdown("Pilihan Pertanyaan Cepat:")
+    cols = st.columns(len(sample_questions))
+    selected_quick_q = None
+    for idx, q_text in enumerate(sample_questions):
+        if cols[idx].button(q_text, key=f"quick_{section_id}_{idx}", use_container_width=True):
+            selected_quick_q = q_text
+
+    with st.form(key=f"form_{section_id}", clear_on_submit=True):
+        custom_question = st.text_input(
+            "Ajukan pertanyaan Anda mengenai data di atas:",
+            value=selected_quick_q if selected_quick_q else "",
+            placeholder="Contoh: Mengapa harga komoditas ini naik drastis?",
+            key=f"input_{section_id}",
+        )
+        submit_btn = st.form_submit_button("Kirim Pertanyaan ke Analis AI")
+
+    active_question = selected_quick_q if selected_quick_q else (custom_question if submit_btn else None)
+
+    if active_question and active_question.strip():
+        if not api_key:
+            st.warning("Silakan masukkan Google Gemini API Key di sidebar untuk mengaktifkan dialog dengan Analis AI.")
+        else:
+            with st.spinner("Analis AI sedang memproses data dan menyusun jawaban..."):
+                answer = ask_gemini_bot(api_key, section_title, context_str, active_question)
+                st.session_state[history_key].append({"q": active_question, "a": answer})
+
+    if st.session_state[history_key]:
+        for item in reversed(st.session_state[history_key]):
+            st.markdown(f"PERTANYAAN: {item['q']}")
+            st.info(item["a"])
+            st.markdown("")
+        if st.button("Hapus Riwayat Tanya Jawab", key=f"clear_{section_id}"):
+            st.session_state[history_key] = []
+            st.rerun()
+
 
 # -- Tab Layout --------------------------------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -238,6 +337,20 @@ with tab1:
         fig_heat.update_layout(height=450)
         st.plotly_chart(fig_heat, use_container_width=True)
 
+    # Context and Bot for Tab 1
+    context_tab1 = f"""Tabel Harga Pivot Komoditas x Tahun:
+{pivot_df.to_string()}
+Rata-rata Harga Keseluruhan: Rp {avg_price:,.0f}
+Komoditas Termahal: {max_commodity['komoditas']} (Rp {max_commodity['harga_rata_rata']:,.0f})
+Komoditas Termurah: {min_commodity['komoditas']} (Rp {min_commodity['harga_rata_rata']:,.0f})
+"""
+    sample_q_tab1 = [
+        "Komoditas apa yang memiliki disparitas harga paling mencolok?",
+        "Bagaimana perbandingan harga Beras IR I dengan Beras IR III?",
+        "Komoditas apa yang harganya paling stabil selama 3 tahun?",
+    ]
+    render_interactive_bot("tab1", "Perbandingan Harga", context_tab1, gemini_key_input, sample_q_tab1)
+
 # -- Tab 2: Trends & Inflation -----------------------------------------
 with tab2:
     st.subheader("Tren Harga dan Laju Inflasi Year-over-Year")
@@ -278,6 +391,21 @@ with tab2:
     fig_cagr.update_layout(height=450, yaxis=dict(autorange="reversed"))
     st.plotly_chart(fig_cagr, use_container_width=True)
 
+    # Context and Bot for Tab 2
+    context_tab2 = f"""Data Pertumbuhan dan Inflasi Pangan:
+Compound Annual Growth Rate (CAGR 2-Tahun):
+{cagr_series.to_string()}
+Laju Inflasi YoY:
+{yoy_df.to_string()}
+Catatan Kunci: Bawang Merah mengalami CAGR tertinggi (+12.43%), disusul Minyak Goreng (+11.61%) dan Gula Pasir (+11.01%). Daging Sapi mengalami sedikit deflasi (-0.69%).
+"""
+    sample_q_tab2 = [
+        "Mengapa inflasi Bawang Merah dan Minyak Goreng mencapai dua digit?",
+        "Mengapa harga Daging Sapi cenderung stagnan atau sedikit deflasi?",
+        "Apa implikasi kenaikan harga minyak goreng terhadap biaya hidup rumah tangga?",
+    ]
+    render_interactive_bot("tab2", "Tren dan Inflasi", context_tab2, gemini_key_input, sample_q_tab2)
+
 # -- Tab 3: Clustering -------------------------------------------------
 with tab3:
     st.subheader("Segmentasi Pasar Komoditas dengan K-Means Clustering")
@@ -301,7 +429,7 @@ with tab3:
 
     col_sil1, col_sil2 = st.columns([1, 2])
     with col_sil1:
-        st.markdown(f"**Klaster Optimal Berdasarkan Evaluasi Silhouette**: K = {best_k}")
+        st.markdown(f"Klaster Optimal Berdasarkan Evaluasi Silhouette: K = {best_k}")
         sil_df = pd.DataFrame(list(sil_scores.items()), columns=["K (Jumlah Klaster)", "Skor Silhouette"])
         st.dataframe(sil_df.set_index("K (Jumlah Klaster)"))
 
@@ -350,6 +478,21 @@ with tab3:
     profile = features.groupby("segment")[["mean_price", "volatility", "growth"]].mean().round(2)
     profile.columns = ["Rata-rata Harga (IDR)", "Rata-rata Volatilitas", "Pertumbuhan (%)"]
     st.dataframe(profile, use_container_width=True)
+
+    # Context and Bot for Tab 3
+    context_tab3 = f"""Hasil Clustering K-Means Komoditas Pangan:
+Jumlah Klaster Optimal: K = {best_k} (Skor Silhouette = {sil_scores[best_k]:.4f})
+Profil Rata-rata Klaster:
+{profile.to_string()}
+Daftar Anggota Klaster:
+{features[['segment', 'mean_price', 'volatility', 'growth']].to_string()}
+"""
+    sample_q_tab3 = [
+        "Mengapa model memilih 3 klaster sebagai segmentasi terbaik?",
+        "Apa saja karakteristik komoditas pada Tier 1?",
+        "Apa langkah penanganan khusus untuk komoditas pada masing-masing klaster?",
+    ]
+    render_interactive_bot("tab3", "Clustering dan Segmentasi", context_tab3, gemini_key_input, sample_q_tab3)
 
 # -- Tab 4: Forecasting ------------------------------------------------
 with tab4:
@@ -403,12 +546,26 @@ with tab4:
     c2.metric("Rata-rata MAE", f"Rp {avg_mae:,.0f}")
     c3.metric("Total Komoditas Terprediksi", f"{len(forecast_df)}")
 
+    # Context and Bot for Tab 4
+    context_tab4 = f"""Hasil Peramalan Harga Pangan Tahun 2026 (Regresi Linier):
+Rata-rata Akurasi R2: {avg_r2:.4f}
+Rata-rata MAE: Rp {avg_mae:,.0f}
+Tabel Proyeksi Harga 2026:
+{forecast_df.to_string()}
+"""
+    sample_q_tab4 = [
+        "Komoditas mana yang diprediksi mengalami lonjakan nominal tertinggi di 2026?",
+        "Seberapa andal akurasi model regresi linier dalam peramalan harga ini?",
+        "Langkah mitigasi apa yang perlu disiapkan sebelum tahun 2026?",
+    ]
+    render_interactive_bot("tab4", "Forecasting 2026", context_tab4, gemini_key_input, sample_q_tab4)
+
 # -- Tab 5: AI Policy Recommendations (Google AI Studio) --------------
 with tab5:
     st.subheader("Rekomendasi Kebijakan dan Strategi Pasar Pangan Berbasis AI")
     st.markdown(
         """
-        Sistem Rekomendasi Kebijakan Cerdas memanfaatkan model **Google Gemini AI** dari **Google AI Studio**.
+        Sistem Rekomendasi Kebijakan Cerdas memanfaatkan model Google Gemini AI dari Google AI Studio.
         Modul ini mengonversi metrik statistik harga, volatilitas, hasil clustering, dan estimasi peramalan 2026
         menjadi rekomendasi kebijakan terstruktur bagi pembuat keputusan (Bapanas, Kementerian Perdagangan) 
         serta panduan mitigasi risiko bagi pelaku usaha dan konsumen.
@@ -448,7 +605,7 @@ Analisis data intelijen harga komoditas pangan pokok Indonesia berikut:
 - Segmen Klaster Pasar: {metrics.get('cluster', 'N/A')}
 - Estimasi Model Prediksi Tahun 2026: Rp {metrics.get('forecast_2026', 0):,.0f} (Perubahan: {metrics.get('forecast_pct', 0):+.2f}%)
 
-Berikan dokumen analisis strategis eksekutif yang lugas, terstruktur, berbasis bukti kuantitatif di atas, dan TANPA menggunakan emoji apapun.
+Berikan dokumen analisis strategis eksekutif yang lugas, terstruktur, berbasis bukti kuantitatif di atas, dan TANPA menggunakan emoji atau simbol bintang (asterisk) apapun. DILARANG MENGGUNAKAN FORMAT BOLD.
 Format laporan mencakup 4 bagian:
 
 1. DIAGNOSIS STRUKTUR PASAR DAN VOLATILITAS
@@ -477,7 +634,8 @@ Format laporan mencakup 4 bagian:
                 resp = requests.post(url, headers=headers, json=payload, timeout=25)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                    raw = data["candidates"][0]["content"]["parts"][0]["text"]
+                    return sanitize_plain_text(raw)
                 elif resp.status_code == 404:
                     continue
                 else:
@@ -533,25 +691,25 @@ Format laporan mencakup 4 bagian:
 
         output = f"""### Laporan Rekomendasi Intelijen Pasar: {commodity}
 
-**Tingkat Risiko Pasar**: {risk}  
-**Ringkasan Prediksi**: Harga 2025 tercatat Rp {p25:,.0f} dan diperkirakan mencapai Rp {f26:,.0f} pada 2026 ({pct_change:+.2f}%).
+Tingkat Risiko Pasar: {risk}  
+Ringkasan Prediksi: Harga 2025 tercatat Rp {p25:,.0f} dan diperkirakan mencapai Rp {f26:,.0f} pada 2026 ({pct_change:+.2f}%).
 
-#### 1. Diagnosis Struktur Pasar dan Volatilitas
+1. DIAGNOSIS STRUKTUR PASAR DAN VOLATILITAS
 {diag}
 
-#### 2. Tingkat Risiko terhadap Stabilitas Inflasi
+2. TINGKAT RISIKO TERHADAP STABILITAS INFLASI
 Komoditas ini memberikan kontribusi yang terukur terhadap Indeks Harga Konsumen (IHK). Pada level pertumbuhan saat ini, diperlukan pengawasan rutin pada rantai distribusi agar tidak menciptakan efek domino terhadap biaya hidup masyarakat.
 
-#### 3. Rekomendasi Kebijakan Regulator (Bapanas / Kemendag / Kementan)
+3. REKOMENDASI KEBIJAKAN REGULATOR (BAPANAS / KEMENDAG / KEMENTAN)
 - {reg[0]}
 - {reg[1]}
 - {reg[2]}
 
-#### 4. Rekomendasi Strategis untuk Pelaku Usaha dan Konsumen
+4. REKOMENDASI STRATEGIS UNTUK PELAKU USAHA DAN KONSUMEN
 - {biz[0]}
 - {biz[1]}
 """
-        return output
+        return sanitize_plain_text(output)
 
     if gemini_key_input:
         st.info("API Key Google AI Studio terdeteksi. Anda dapat menghasilkan analisis komprehensif menggunakan model Gemini.")
@@ -565,19 +723,34 @@ Komoditas ini memberikan kontribusi yang terukur terhadap Indeks Harga Konsumen 
     else:
         st.markdown(
             """
-            > **Catatan Penggunaan**: Masukkan Google Gemini API Key pada sidebar untuk mengaktifkan penalaran generatif langsung dari Google AI Studio.
-            > Di bawah ini disajikan **Laporan Rekomendasi Ekonometrika Standar** berbasis algoritma rule-based internal.
+            > Catatan Penggunaan: Masukkan Google Gemini API Key pada sidebar untuk mengaktifkan penalaran generatif langsung dari Google AI Studio.
+            > Di bawah ini disajikan Laporan Rekomendasi Ekonometrika Standar berbasis algoritma rule-based internal.
             """
         )
         heuristic_text = generate_heuristic_recommendation(selected_ai_commodity, m)
         st.markdown(heuristic_text)
+
+    # Interactive Bot for Tab 5
+    context_tab5 = f"""Kebijakan Pangan Nasional dan Analisis Komoditas Terpilih:
+Komoditas: {selected_ai_commodity}
+Harga 2023-2025: Rp {m.get('price_2023', 0):,.0f} -> Rp {m.get('price_2024', 0):,.0f} -> Rp {m.get('price_2025', 0):,.0f}
+Laju CAGR 2-Tahun: {m.get('cagr', 0):.2f}%
+Prediksi Harga 2026: Rp {m.get('forecast_2026', 0):,.0f}
+Segmen Klaster: {m.get('cluster', 'N/A')}
+"""
+    sample_q_tab5 = [
+        "Apa rekomendasi intervensi pasar terfokus untuk Bapanas?",
+        "Bagaimana koordinasi subsidi logistik antarpulau untuk menekan harga cabai dan bawang?",
+        "Apa panduan manajemen stok bahan baku untuk pelaku usaha kuliner dan ritel?",
+    ]
+    render_interactive_bot("tab5", "Rekomendasi Kebijakan AI", context_tab5, gemini_key_input, sample_q_tab5)
 
 # -- Footer ------------------------------------------------------------
 st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: #888; font-size: 0.85em;'>
-        <strong>Harga Pangan Indonesia</strong> — Food Price Intelligence Platform<br/>
+        Harga Pangan Indonesia — Food Price Intelligence Platform<br/>
         Author: <a href='https://fauzinoorsyabani.my.id' target='_blank'>Fauzi Noorsyabani</a> | 
         Data: BPS / Kementerian Perdagangan RI | 2026
     </div>
