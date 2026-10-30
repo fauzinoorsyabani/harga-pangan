@@ -133,43 +133,14 @@ with st.sidebar:
         default=sorted(df["periode_data"].unique()),
     )
 
-    # Look for API key from server-side st.secrets or os.getenv
-    server_key = ""
+    # Look for API key silently from server-side st.secrets or os.getenv
+    gemini_key_input = ""
     try:
-        server_key = st.secrets.get("GEMINI_API_KEY", "")
+        gemini_key_input = st.secrets.get("GEMINI_API_KEY", "")
     except Exception:
         pass
-    if not server_key:
-        server_key = os.getenv("GEMINI_API_KEY", "")
-
-    st.markdown("---")
-    st.markdown("### Integrasi AI Studio (Gemini)")
-
-    if server_key:
-        gemini_key_input = server_key
-        st.success("Status: Terhubung (Server Secured)")
-        st.caption("Kunci AI tersimpan aman di server backend dan tidak dapat dilihat oleh publik.")
-        with st.expander("Gunakan API Key Pribadi (Opsional)"):
-            custom_key = st.text_input(
-                "Masukkan Key Pengganti",
-                type="password",
-                value="",
-                placeholder="AQ...",
-                help="Kosongkan jika ingin memakai kunci default server.",
-            )
-            if custom_key.strip():
-                gemini_key_input = custom_key.strip()
-    else:
-        custom_key = st.text_input(
-            "Google Gemini API Key",
-            type="password",
-            value="",
-            placeholder="Masukkan API Key Google AI Studio...",
-            help="Dapatkan API Key gratis di aistudio.google.com untuk mengaktifkan fitur AI.",
-        )
-        gemini_key_input = custom_key.strip()
-        if gemini_key_input:
-            st.caption("Status API: Terhubung secara manual")
+    if not gemini_key_input:
+        gemini_key_input = os.getenv("GEMINI_API_KEY", "")
 
     st.markdown("---")
     st.markdown("Pengembang: [Fauzi Noorsyabani](https://fauzinoorsyabani.my.id)")
@@ -730,7 +701,6 @@ Komoditas ini memberikan kontribusi yang terukur terhadap Indeks Harga Konsumen 
         return sanitize_plain_text(output)
 
     if gemini_key_input:
-        st.info("API Key Google AI Studio terdeteksi. Anda dapat menghasilkan analisis komprehensif menggunakan model Gemini.")
         if st.button("Generate Rekomendasi Strategis via Gemini AI"):
             with st.spinner("Sedang memproses analisis ekonomi komoditas menggunakan Google Gemini AI..."):
                 try:
